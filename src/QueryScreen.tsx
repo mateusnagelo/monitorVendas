@@ -1,8 +1,11 @@
-import { useState, useEffect, useContext } from 'react';
-import axios from 'axios';
+import { useState, useContext } from 'react';
 import {
   TextField,
   Button,
+  Box,
+  Typography,
+  CircularProgress,
+  Alert,
   Table,
   TableBody,
   TableCell,
@@ -10,33 +13,20 @@ import {
   TableHead,
   TableRow,
   Paper,
-  CircularProgress,
-  Alert,
-  Box,
-  Typography,
 } from '@mui/material';
-import { DbContext } from './DbContext.ts';
-
-
-// Define a type for a single row of results
-type ResultRow = Record<string, any>;
+import axios from 'axios';
+import { DbContext } from './DbContext';
 
 function QueryScreen() {
-  const [query, setQuery] = useState('SELECT * FROM INFORMATION_SCHEMA.TABLES;');
-  const [results, setResults] = useState<ResultRow[] | null>(null);
-  const [error, setError] = useState('');
+  const [query, setQuery] = useState('SELECT * FROM NFE');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [results, setResults] = useState<any[] | null>(null);
   const context = useContext(DbContext);
 
-  if (!context) {
-    throw new Error('QueryScreen must be used within a DbContext.Provider');
-  }
-
-  const { dbConfig } = context;
-
   const executeQuery = async () => {
-    if (!dbConfig) {
-      setError('A configuração do banco de dados não está carregada.');
+    if (!context?.dbConfig) {
+      setError('A configuração do banco de dados não foi encontrada.');
       return;
     }
 
@@ -45,83 +35,61 @@ function QueryScreen() {
     setResults(null);
 
     try {
-      const response = await axios.post('/.netlify/functions/query', { query, dbConfig });
-      setResults(response.data);
+      const response = await axios.post('/.netlify/functions/execute-query', {
+        dbConfig: context.dbConfig,
+        query,
+      });
+      setResults(response.data.results);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Erro ao executar a consulta');
-      setResults(null);
+      setError(err.response?.data?.error || 'Falha ao executar a consulta.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (!dbConfig) {
-      setError("Nenhuma configuração de banco de dados encontrada. Por favor, configure primeiro na tela de configurações. ⚙️");
-    }
-  }, [dbConfig]);
-
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h5" gutterBottom>
-        Executar Consulta SQL
-      </Typography>
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="h5">Executar Consulta SQL</Typography>
       <TextField
         label="Consulta SQL"
         multiline
-        rows={6}
+        rows={4}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         variant="outlined"
         fullWidth
-        margin="normal"
-        disabled={!dbConfig || loading}
       />
       <Button
         onClick={executeQuery}
         variant="contained"
-        disabled={!dbConfig || loading}
+        disabled={loading || !query}
         startIcon={loading ? <CircularProgress size={20} /> : null}
       >
         {loading ? 'Executando...' : 'Executar'}
       </Button>
-
-      {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
-
+      {error && <Alert severity="error">{error}</Alert>}
       {results && (
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h6">Resultados</Typography>
-          {results.length > 0 ? (
-            <Box sx={{ overflowX: 'auto' }}>
-              <TableContainer component={Paper} sx={{ mt: 2 }}>
-                <Table stickyHeader>
-                  <TableHead>
-                    <TableRow>
-                      {Object.keys(results[0]).map((key) => (
-                        <TableCell key={key} sx={{ fontWeight: 'bold' }}>{key}</TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {results.map((row: ResultRow, index: number) => (
-                      <TableRow key={index}>
-                        {Object.values(row).map((value: any, i: number) => (
-                          <TableCell key={i}>
-                            {value && value.type === 'Buffer'
-                              ? '[Buffer]'
-                              : (typeof value === 'object' && value !== null ? JSON.stringify(value) : value)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          ) : (
-            <Alert severity="info" sx={{ mt: 2 }}>Nenhum resultado encontrado.</Alert>
-          )}
-        </Box>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                {results.length > 0 &&
+                  Object.keys(results[0]).map((key) => (
+                    <TableCell key={key}>{key}</TableCell>
+                  ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {results.map((row, index) => (
+                <TableRow key={index}>{
+                  Object.values(row).map((value: any, i) => (
+                    <TableCell key={i}>{String(value)}</TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
     </Box>
   );

@@ -1,145 +1,153 @@
-import { useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
-import axios from 'axios';
+import { useState, useContext, useEffect } from 'react';
 import {
-  Box,
   TextField,
   Button,
+  Box,
+  Typography,
   CircularProgress,
   Alert,
   Tabs,
   Tab,
-  Typography,
-  Paper,
 } from '@mui/material';
+import axios from 'axios';
+import { DbContext } from './DbContext';
+import type { DbConfig } from './DbContext';
 
-interface TabPanelProps {
-  children?: ReactNode;
-  index: number;
-  value: number;
+interface ConfigScreenProps {
+  onConfigSaved: () => void;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`config-tabpanel-${index}`}
-      aria-labelledby={`config-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-}
-
-function ConfigScreen({ onSave }: { onSave: (config: any) => void }) {
-  const [configs, setConfigs] = useState({
-    local: { host: '', port: '', user: '', password: '', database: '' },
-    cloud: { host: '', port: '', user: '', password: '', database: '' },
-  });
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [tabValue, setTabValue] = useState(0);
-  const [loadingTest, setLoadingTest] = useState(false);
+function ConfigScreen({ onConfigSaved }: ConfigScreenProps) {
+  const [config, setConfig] = useState<DbConfig>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [tab, setTab] = useState('local');
+  const context = useContext(DbContext);
 
   useEffect(() => {
-    const savedConfigs = localStorage.getItem('dbConfigs');
-    if (savedConfigs) {
-      try {
-        setConfigs(JSON.parse(savedConfigs));
-      } catch (e) {
-        console.error("Falha ao carregar as configurações.");
-      }
+    if (context?.dbConfig) {
+      setConfig(context.dbConfig);
     }
-  }, []);
+  }, [context?.dbConfig]);
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-    setTestResult(null); // Limpa o resultado do teste ao trocar de aba
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    setConfig((prevConfig) => ({
+      ...prevConfig,
+      [name]: name === 'port' ? parseInt(value, 10) : value,
+    }));
   };
 
-  const handleConfigChange = (env: 'local' | 'cloud', field: string, value: string) => {
-    setConfigs(prev => ({ ...prev, [env]: { ...prev[env], [field]: value } }));
-  };
-
-  const handleSave = () => {
-    localStorage.setItem('dbConfigs', JSON.stringify(configs));
-    const activeEnv = tabValue === 0 ? 'local' : 'cloud';
-    onSave(configs[activeEnv]);
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: string) => {
+    setTab(newValue);
   };
 
   const testConnection = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess(false);
+
     try {
-      const response = await axios.post('/.netlify/functions/test-connection');
-      setTestResult(response.data);
-    } catch (error: any) {
-      setTestResult({ success: false, message: `Erro: ${error.response?.data?.message || error.message}` });
+      await axios.post('/.netlify/functions/test-connection', config);
+      setSuccess(true);
+    } catch (err: any) {
+      const errorData = err.response?.data;
+      const errorMessage = errorData?.message || 'Falha na conexão com o banco de dados';
+      const configUsed = errorData?.configUsed ? `\nConfiguração utilizada: ${JSON.stringify(errorData.configUsed)}` : '';
+      setError(`${errorMessage}${configUsed}`);
     } finally {
-      setLoadingTest(false);
+      setLoading(false);
     }
   };
 
-  const renderFields = (env: 'local' | 'cloud') => (
-    <Box component="form" noValidate autoComplete="off">
-      {Object.keys(configs[env]).map(field => (
-        <TextField
-          key={field}
-          label={field.charAt(0).toUpperCase() + field.slice(1)}
-          type={field === 'password' ? 'password' : 'text'}
-          value={configs[env][field as keyof typeof configs[typeof env]]}
-          onChange={e => handleConfigChange(env, field, e.target.value)}
-          variant="outlined"
-          fullWidth
-          margin="normal"
-        />
-      ))}
-    </Box>
-  );
+  const saveAndApply = () => {
+    localStorage.setItem('dbConfig', JSON.stringify(config));
+    context?.setDbConfig(config);
+    onConfigSaved();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('dbConfig');
+    context?.setDbConfig(null);
+  };
 
   return (
-    <Paper sx={{ p: 2, maxWidth: 600, margin: 'auto' }}>
-      <Typography variant="h5" gutterBottom>
-        Configurações do Banco de Dados
-      </Typography>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="abas de configuração" variant="scrollable" scrollButtons="auto">
-          <Tab label="Local" id="config-tab-0" />
-          <Tab label="Cloud" id="config-tab-1" />
-        </Tabs>
-      </Box>
-      <TabPanel value={tabValue} index={0}>
-        {renderFields('local')}
-      </TabPanel>
-      <TabPanel value={tabValue} index={1}>
-        {renderFields('cloud')}
-      </TabPanel>
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="h5">Configurações do Banco de Dados</Typography>
+      <Tabs value={tab} onChange={handleTabChange} centered>
+        <Tab label="LOCAL" value="local" />
+        <Tab label="CLOUD" value="cloud" />
+      </Tabs>
 
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Button
-          onClick={testConnection}
-          variant="outlined"
-          disabled={loadingTest}
-          startIcon={loadingTest ? <CircularProgress size={20} /> : null}
-        >
-          {loadingTest ? 'Testando...' : 'Testar Conexão'}
+      <TextField
+        label="Host"
+        name="host"
+        value={config.host || ''}
+        onChange={handleInputChange}
+        variant="outlined"
+        fullWidth
+      />
+      <TextField
+        label="Porta"
+        name="port"
+        type="number"
+        value={config.port || ''}
+        onChange={handleInputChange}
+        variant="outlined"
+        fullWidth
+      />
+      <TextField
+        label="Usuário"
+        name="user"
+        value={config.user || ''}
+        onChange={handleInputChange}
+        variant="outlined"
+        fullWidth
+      />
+      <TextField
+        label="Senha"
+        name="password"
+        type="password"
+        value={config.password || ''}
+        onChange={handleInputChange}
+        variant="outlined"
+        fullWidth
+      />
+      <TextField
+        label="Banco de Dados"
+        name="database"
+        value={config.database || ''}
+        onChange={handleInputChange}
+        variant="outlined"
+        fullWidth
+      />
+
+      <Button
+        onClick={testConnection}
+        variant="outlined"
+        disabled={loading}
+        startIcon={loading ? <CircularProgress size={20} /> : null}
+      >
+        {loading ? 'Testando...' : 'Testar Conexão'}
+      </Button>
+      <Button
+        onClick={saveAndApply}
+        variant="contained"
+        disabled={!success}
+      >
+        Salvar e Aplicar
+      </Button>
+
+      {context?.dbConfig && (
+        <Button onClick={handleLogout} variant="outlined" color="error">
+          Esquecer Conexão
         </Button>
+      )}
 
-        {testResult && (
-          <Alert severity={testResult.success ? 'success' : 'error'}>
-            {testResult.message}
-          </Alert>
-        )}
-
-        <Button onClick={handleSave} variant="contained" color="primary">
-          Salvar e Aplicar
-        </Button>
-      </Box>
-    </Paper>
+      {error && <Alert severity="error">{error}</Alert>}
+      {success && <Alert severity="success">Conexão bem-sucedida!</Alert>}
+    </Box>
   );
 }
 

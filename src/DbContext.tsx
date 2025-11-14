@@ -1,16 +1,16 @@
 import { createContext } from 'react';
 
-export interface DbConfig {
-  host?: string;
-  port?: number;
+export type DbConfig = {
   user?: string;
   password?: string;
+  host?: string;
+  port?: number;
   database?: string;
 }
 
-export type DbContextType = {
+interface DbContextType {
   dbConfig: DbConfig | null;
   setDbConfig: (config: DbConfig | null) => void;
-};
+}
 
-export const DbContext = createContext<DbContextType | null>(null);
+export const DbContext = createContext<DbContextType | undefined>(undefined);

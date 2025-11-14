@@ -5,13 +5,22 @@ exports.handler = async (event, context) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const dbConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_DATABASE,
-    port: process.env.DB_PORT || 3306,
-  };
+  let dbConfig;
+  try {
+    if (!event.body) {
+      throw new Error('Request body is empty');
+    }
+    console.log('Received event.body:', event.body);
+    const { host, port, user, password, database } = JSON.parse(event.body);
+    dbConfig = { host, port: port || 3306, user, password, database };
+    console.log('Parsed dbConfig:', dbConfig);
+  } catch (parseError) {
+    console.error('Error parsing request body:', parseError);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ success: false, message: `Bad Request: ${parseError.message}` }),
+    };
+  }
 
   let connection;
   try {
@@ -25,7 +34,11 @@ exports.handler = async (event, context) => {
     console.error('Erro ao conectar ao banco de dados:', err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ success: false, message: `Falha na conexão: ${err.message}` }),
+      body: JSON.stringify({
+        success: false,
+        message: `Falha na conexão: ${err.message}`,
+        configUsed: dbConfig,
+      }),
     };
   } finally {
     if (connection) {
