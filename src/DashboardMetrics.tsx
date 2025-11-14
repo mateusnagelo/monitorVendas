@@ -8,8 +8,8 @@ import {
   Box,
   Alert
 } from '@mui/material';
-import { DbContext } from './DbContext.ts';
-
+import { DbContext } from './DbContext';
+import type { DbConfig } from './DbContext';
 
 interface MetricCardProps {
   title: string;
@@ -45,50 +45,49 @@ function MetricCard({ title, data }: MetricCardProps) {
   );
 }
 
-function DashboardMetrics({ isLoading }: { isLoading: boolean }) {
+function DashboardMetrics() {
   const [metrics, setMetrics] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
   const context = useContext(DbContext);
-
-  if (!context) {
-    throw new Error('DashboardMetrics must be used within a DbContext.Provider');
-  }
-
-  const { dbConfig } = context;
 
   useEffect(() => {
     const fetchMetrics = async () => {
-      if (!dbConfig) {
+      if (!context?.dbConfig) {
+        setError('A configuração do banco de dados não foi encontrada. Por favor, configure a conexão primeiro.');
+        setIsLoading(false);
         return;
       }
 
+      setIsLoading(true);
       setError('');
-      setMetrics(null);
       try {
-        const response = await axios.post('/.netlify/functions/dashboard-metrics', dbConfig);
+        const response = await axios.post('/.netlify/functions/dashboard-metrics', { dbConfig: context.dbConfig });
         setMetrics(response.data);
       } catch (error) {
         console.error('Erro ao buscar métricas do dashboard:', error);
-        setError('Não foi possível carregar as métricas. Verifique a configuração e a conexão.');
+        setError('Não foi possível carregar as métricas. Verifique a conexão e tente novamente.');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchMetrics();
-  }, [dbConfig]);
+  }, [context?.dbConfig]);
+
+  if (!context?.dbConfig) {
+    return (
+      <Alert severity="warning" sx={{ mt: 2 }}>
+        Por favor, configure a conexão com o banco de dados na tela de ajustes.
+      </Alert>
+    );
+  }
 
   if (isLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
         <CircularProgress />
       </Box>
-    );
-  }
-
-  if (!dbConfig) {
-    return (
-      <Alert severity="info" sx={{ mt: 2 }}>
-        Por favor, clique no ícone de engrenagem ⚙️ para configurar a conexão com o banco de dados.
-      </Alert>
     );
   }
 
@@ -101,12 +100,8 @@ function DashboardMetrics({ isLoading }: { isLoading: boolean }) {
   }
 
   if (!metrics) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>Carregando métricas...</Typography>
-      </Box>
-    );
+    // This state might be brief, but good to have for robustness
+    return <Typography sx={{ mt: 2 }}>Sem métricas para exibir.</Typography>;
   }
 
   return (
