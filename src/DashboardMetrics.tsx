@@ -9,7 +9,6 @@ import {
   Alert
 } from '@mui/material';
 import { DbContext } from './DbContext';
-import type { DbConfig } from './DbContext';
 
 interface MetricCardProps {
   title: string;

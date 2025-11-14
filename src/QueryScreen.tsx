@@ -16,7 +16,6 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 import { DbContext } from './DbContext';
-import type { DbConfig } from './DbContext';
 
 function QueryScreen() {
   const [query, setQuery] = useState('SELECT * FROM NFE');

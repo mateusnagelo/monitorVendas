@@ -20,7 +20,7 @@ import type { DbConfig } from './DbContext';
 import { useIsMobile } from './useIsMobile.ts';
 
 function App() {
-  const { dbConfig } = useContext(DbContext);
+  const context = useContext(DbContext);
   const [currentView, setCurrentView] = useState('main');
   const isMobile = useIsMobile();
 
@@ -29,7 +29,7 @@ function App() {
   };
 
   const renderContent = () => {
-    if (!dbConfig) {
+    if (!context?.dbConfig) {
       return <ConfigScreen onConfigSaved={() => setCurrentView('main')} />;
     }
 
